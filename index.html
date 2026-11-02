@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https://mempool.space; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>BOLT11 Invoice Decoder – offline, in your browser</title>
+<meta name="description" content="Decode Lightning (BOLT11) invoices locally: amount, expiry countdown, payee node, description, route hints, signature check. No server, works offline.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M9 0L2 9h5l-1 7 7-9H8z' fill='%23f7931a'/%3E%3C/svg%3E">
+<style>
+:root{--bg:#0f1115;--card:#171a21;--line:#262b36;--fg:#e6e8ee;--mut:#9aa3b2;--acc:#f7931a;--ok:#3fb950;--bad:#f85149;--warn:#d29922}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:860px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:1.5rem;margin:0 0 4px}h1 span{color:var(--acc)}
+h2{font-size:1.05rem;margin:0 0 10px}
+p.sub{color:var(--mut);margin:0 0 18px}
+textarea{width:100%;min-height:110px;resize:vertical;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:12px;font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-all}
+textarea:focus{outline:2px solid var(--acc);border-color:transparent}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}
+button,.btn{background:#222734;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font:inherit;font-size:.9rem;cursor:pointer;text-decoration:none;display:inline-block}
+button:hover,.btn:hover{border-color:var(--acc)}
+button.pri{background:var(--acc);color:#111;border-color:var(--acc);font-weight:600}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:16px 0}
+.badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.8rem;font-weight:600;margin-right:6px}
+.b-ok{background:#12351d;color:var(--ok)}.b-bad{background:#3d1416;color:var(--bad)}.b-warn{background:#3a2c0c;color:var(--warn)}.b-mut{background:#222734;color:var(--mut)}
+.amount{font-size:1.9rem;font-weight:700;margin:8px 0 0}.amount small{font-size:1rem;color:var(--mut);font-weight:400}
+.cd{font-size:1.1rem;margin:4px 0 12px;color:var(--mut)}.cd b{color:var(--fg)}
+table{width:100%;border-collapse:collapse}
+td{padding:7px 6px;border-top:1px solid var(--line);vertical-align:top}
+td.k{color:var(--mut);white-space:nowrap;width:1%;padding-right:14px}
+td.v{word-break:break-all;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.85rem}
+td.v.txt{font-family:inherit;font-size:.95rem;word-break:break-word}
+.cp{padding:1px 7px;font-size:.75rem;margin-left:6px;vertical-align:middle}
+ul.msg{margin:8px 0 0;padding-left:20px}ul.msg li.e{color:var(--bad)}ul.msg li.w{color:var(--warn)}
+.err{color:var(--bad);font-weight:600}
+.qr{background:#fff;border-radius:10px;padding:8px;width:220px;max-width:100%}
+.qr svg{display:block;width:100%;height:auto}
+.mut{color:var(--mut)}.small{font-size:.85rem}
+.tip{display:flex;gap:18px;flex-wrap:wrap;align-items:center}
+.tip .qr{width:150px}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.85rem;word-break:break-all}
+footer{color:var(--mut);font-size:.85rem;margin-top:28px;border-top:1px solid var(--line);padding-top:14px}
+details summary{cursor:pointer;color:var(--mut)}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<main>
+  <h1><span>⚡</span> BOLT11 Invoice Decoder</h1>
+  <p class="sub">Paste a Lightning invoice to see what it asks for before you pay. Decoding and signature checks run entirely in your browser; nothing is sent anywhere. Works offline.</p>
+
+  <label for="inp" class="mut small">Invoice (lnbc…, lntb…, or lightning:… URI)</label>
+  <textarea id="inp" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="lnbc..."></textarea>
+  <div class="row">
+    <button class="pri" id="btnDecode">Decode</button>
+    <button id="btnPaste">Paste</button>
+    <button id="btnExample">Example</button>
+    <button id="btnClear">Clear</button>
+  </div>
+
+  <div id="out"></div>
+
+  <section class="card" id="tipCard">
+    <h2>Tip with Lightning</h2>
+    <div class="tip">
+      <div class="qr" id="tipQr" aria-label="QR code for the Lightning address"></div>
+      <div>
+        <p class="small mut" style="margin:0 0 8px">If this tool saved you time, tips are welcome but never expected.</p>
+        <div><code id="lnAddr">pluckymotor700@walletofsatoshi.com</code> <button class="cp" data-copy="pluckymotor700@walletofsatoshi.com">Copy</button></div>
+        <div class="row"><a class="btn" href="lightning:pluckymotor700@walletofsatoshi.com">Open in wallet</a></div>
+        <details class="small"><summary>Solana instead</summary>
+          <p style="margin:6px 0"><code>8epRviS7ukiKp2XxfQB5hUzAqP81X7L1uq99MMTE4buQ</code> <button class="cp" data-copy="8epRviS7ukiKp2XxfQB5hUzAqP81X7L1uq99MMTE4buQ">Copy</button></p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>Implements the <a href="https://github.com/lightning/bolts/blob/master/11-payment-encoding.md" style="color:inherit">BOLT #11</a> reader rules and passes all of the spec's test vectors. No cookies, no analytics, no ads. The only network request this page can make is the optional fiat price lookup, and only when you click it.</p>
+    <p>Tip: save this page (Ctrl/Cmd+S) to keep a copy that works with no connection at all.</p>
+  </footer>
+</main>
+<script src="qrcode.js"></script>
+<script src="bolt11.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
